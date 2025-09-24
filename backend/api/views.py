@@ -5,9 +5,11 @@ from django.shortcuts import render
 
 
 from rest_framework import viewsets
+from rest_framework.response import Response
 from .models import AcademicArea, Resource, ResourceConnection, CanvasItem, Task
 from .serializers import (
     AcademicAreaSerializer, 
+    AcademicAreaDetailSerializer,
     ResourceSerializer, 
     ResourceConnectionSerializer, 
     CanvasItemSerializer, 
@@ -19,6 +21,12 @@ class AcademicAreaViewSet(viewsets.ModelViewSet):
     queryset = AcademicArea.objects.all()
     serializer_class = AcademicAreaSerializer
     lookup_field = 'slug'
+    
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # When we retrieve a single area, we use the DETAILED serializer
+        serializer = AcademicAreaDetailSerializer(instance)
+        return Response(serializer.data)
 
 class ResourceViewSet(viewsets.ModelViewSet):
     queryset = Resource.objects.all()
