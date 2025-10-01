@@ -26,8 +26,12 @@ import TabView from './TabView';
 import AddResourceModal from './AddResourceModal';
 import CustomNode from './CustomNode';
 import AddConnectionModal from './AddConnectionModal';
+import PlannerNode from './PlannerNode';
 
-const nodeTypes = { custom: CustomNode };
+const nodeTypes = {
+  custom: CustomNode,
+  planner: PlannerNode,
+};
 
 // --- Canvas Component ---
 // The Canvas component's job is to render React Flow and handle drop events.
@@ -89,6 +93,129 @@ function WorkspaceView() {
     setIsConnectModalOpen(true);
   }, []);
 
+  const handleTaskToggle = useCallback((taskId, isCompleted) => {
+    axios.patch(`http://127.0.0.1:8000/api/tasks/${taskId}/`, { is_completed: isCompleted })
+      .then(response => {
+        setArea(currentArea => ({
+          ...currentArea,
+          tasks: currentArea.tasks.map(task => task.id === taskId ? response.data : task),
+        }));
+      }).catch(err => console.error("Failed to update task:", err));
+  }, []);
+
+  const handleAddTask = useCallback((description) => {
+    if (!area) return;
+    axios.post('http://127.0.0.1:8000/api/tasks/', { area: area.id, description, is_completed: false })
+      .then(response => {
+        setArea(currentArea => ({
+          ...currentArea,
+          tasks: [...currentArea.tasks, response.data],
+        }));
+      }).catch(err => console.error("Failed to add task:", err));
+  }, [area]);
+
+  const onDeleteNode = useCallback((canvasItemIdToDelete) => {
+    if (!window.confirm("Are you sure you want to remove this item from the canvas?")) return;
+    axios.delete(`http://127.0.0.1:8000/api/canvas-items/${canvasItemIdToDelete}/`)
+      .then(() => {
+        setArea(currentArea => ({
+          ...currentArea,
+          canvas_items: currentArea.canvas_items.filter(item => item.id !== canvasItemIdToDelete),
+        }));
+      }).catch(err => console.error("Failed to delete canvas item:", err));
+  }, []);
+
+  const handleNodeDragStop = useCallback((event, node) => {
+    if (node.id === 'planner-node') {
+      // For now, we don't save the planner's position.
+      // The local drag will feel smooth because of onNodesChange.
+      return;
+    }
+    const { canvasItemId } = node.data;
+    if (!canvasItemId) return;
+
+    axios.patch(`http://127.0.0.1:8000/api/canvas-items/${canvasItemId}/`, {
+      pos_x: Math.round(node.position.x),
+      pos_y: Math.round(node.position.y),
+    }).catch(err => console.error('Failed to update node position:', err));
+  }, []);
+
+  const onResourceDropped = useCallback((droppedItem, position) => {
+    setNodes(currentNodes => {
+      if (currentNodes.some(node => node.id === String(droppedItem.id))) {
+        alert("This resource is already on the canvas.");
+        return currentNodes;
+      }
+      
+      const payload = {
+        area: area.id,
+        resource: droppedItem.id,
+        pos_x: Math.round(position.x),
+        pos_y: Math.round(position.y),
+      };
+      
+      axios.post('http://127.0.0.1:8000/api/canvas-items/', payload)
+      .then(response => {
+          setArea(currentArea => ({
+              ...currentArea,
+              canvas_items: [...currentArea.canvas_items, response.data]
+          }));
+        })
+        .catch(err => console.error("Failed to create canvas item:", err));
+
+        return currentNodes;
+    });
+  }, [area, setNodes]);
+
+
+useEffect(() => {
+    const fetchWorkspaceData = async () => {
+      try {
+        const response = await axios.get(`http://127.0.0.1:8000/api/areas/${areaSlug}/`);
+        setArea(response.data); // Set the master data state
+      } catch (err) { setError('Failed to fetch workspace data.'); } 
+      finally { setLoading(false); }
+    };
+    fetchWorkspaceData();
+  }, [areaSlug]);
+
+  // --- UPDATE PLANNER NODE WHEN TASKS CHANGE ---
+  // NEW: This second useEffect watches for changes in `area.tasks`
+  // and updates the planner node's data to ensure it never has stale data.
+  useEffect(() => {
+    if (!area) return; // Don't run if data hasn't been loaded yet
+
+    const resourceNodes = area.canvas_items.map(item => ({
+      id: String(item.resource.id),
+      position: { x: item.pos_x, y: item.pos_y },
+      data: { label: item.resource.title, canvasItemId: item.id, onDelete: onDeleteNode },
+      type: 'custom',
+    }));
+
+    const plannerNode = {
+      id: 'planner-node',
+      type: 'planner',
+      position: { x: 50, y: 50 }, // Always starts here on load
+      draggable: true,
+      data: {
+        tasks: area.tasks,
+        onTaskToggle: handleTaskToggle,
+        onAddTask: handleAddTask,
+      },
+    };
+
+    setNodes([...resourceNodes, plannerNode]);
+
+    const initialEdges = area.connections.map(conn => ({
+      id: `e-${conn.source}-${conn.target}`,
+      source: String(conn.source),
+      target: String(conn.target),
+      label: conn.label,
+    }));
+    setEdges(initialEdges);
+
+  }, [area, onDeleteNode, handleAddTask, handleTaskToggle, setNodes, setEdges]); // It re-runs ONLY when the master 'area' state changes.
+
   // --- HANDLER: Called when the user saves the connection from the modal ---
   const handleSaveConnection = useCallback((label) => {
     if (!newConnectionData || !area) return;
@@ -126,87 +253,7 @@ function WorkspaceView() {
       });
   }, [area, newConnectionData, setEdges]);
 
-  // --- HANDLER: For deleting a node from the canvas ---
-  const onDeleteNode = useCallback((canvasItemIdToDelete) => {
-    if (!window.confirm("Are you sure you want to remove this item from the canvas?")) {
-      return;
-    }
-    axios.delete(`http://127.0.0.1:8000/api/canvas-items/${canvasItemIdToDelete}/`)
-      .then(() => {
-        setNodes((nds) => nds.filter(node => node.data.canvasItemId !== canvasItemIdToDelete));
-      })
-      .catch(err => {
-        console.error("Failed to delete canvas item:", err);
-        alert("Could not remove the item.");
-      });
-  }, [setNodes]);
 
-  useEffect(() => {
-    const fetchWorkspaceData = async () => {
-      try {
-        const response = await axios.get(`http://127.0.0.1:8000/api/areas/${areaSlug}/`);
-        const data = response.data;
-        setArea(data);
-
-        // --- Data Transformation ---
-        // Convert our 'CanvasItem' data into React Flow 'nodes'
-        const initialNodes = data.canvas_items.map(item => ({
-          id: String(item.resource.id), // Node ID must be a string
-          position: { x: item.pos_x, y: item.pos_y },
-          data: { 
-            label: item.resource.title,
-            // We need the ID of the CanvasItem itself to update it.
-            canvasItemId: item.id 
-          },
-        }));
-        setNodes(initialNodes);
-
-        // Convert our 'ResourceConnection' data into React Flow 'edges'
-        const initialEdges = data.connections.map(conn => ({
-          id: `e-${conn.source}-${conn.target}`, // Edge ID
-          source: String(conn.source), // ID of the source node
-          target: String(conn.target), // ID of the target node
-          label: conn.label, // The label that appears on the edge
-        }));
-        setEdges(initialEdges);
-        
-      } catch (err) {
-        setError('Failed to fetch workspace data.');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchWorkspaceData();
-  },[areaSlug, setNodes, setEdges]);
-
-  // the function that will be called when a node drag stops.
-  const handleNodeDragStop = useCallback((event, node) => {
-    // Get the required data from the node object.
-    const canvasItemId = node.data.canvasItemId;
-    const newPosition = node.position;
-
-    // The URL for the specific CanvasItem we want to update.
-    const url = `http://127.0.0.1:8000/api/canvas-items/${canvasItemId}/`;
-
-    // The data we want to send. We only need to send the fields we are changing.
-    const payload = {
-      pos_x: Math.round(newPosition.x),
-      pos_y: Math.round(newPosition.y),
-    };
-
-    // Send a PATCH request. 'patch' is used for partial updates.
-    axios.patch(url, payload)
-      .then(response => {
-        // You could add a success message here if you wanted.
-        console.log('Position updated successfully:', response.data);
-      })
-      .catch(err => {
-        // It's good practice to log errors so you can debug them.
-        console.error('Failed to update node position:', err);
-        // Here you might want to show an error message to the user.
-      });
-  }, []); // The empty dependency array means this function is created once.
 
   const handleNoteAdded = (newNote) => {
     // Create a new, updated version of the area object
@@ -235,49 +282,6 @@ function WorkspaceView() {
       resources: [...currentArea.resources, newResource]
     }));
   };
-
-  const onResourceDropped = useCallback((droppedItem, position) => {
-    // Check if a node for this resource already exists on the canvas
-    const nodeExists = nodes.some(node => node.id === String(droppedItem.id));
-    if (nodeExists) {
-      alert("This resource is already on the canvas.");
-      return;
-    }
-
-    // 1. Prepare the data for the API call to create a new CanvasItem
-    const payload = {
-      area: area.id,
-      resource: droppedItem.id,
-      pos_x: Math.round(position.x),
-      pos_y: Math.round(position.y),
-    };
-
-    // 2. Make the API call
-    axios.post('http://127.0.0.1:8000/api/canvas-items/', payload)
-      .then(response => {
-        const newCanvasItem = response.data;
-
-        // 3. Create a new node for the React Flow canvas
-        const newNode = {
-          id: String(newCanvasItem.resource), // In our manual API, the resource ID is just a number
-          position: { x: newCanvasItem.pos_x, y: newCanvasItem.pos_y },
-          data: {
-            label: droppedItem.title, // We get the title from the item we dropped
-            canvasItemId: newCanvasItem.id,
-            onDelete: onDeleteNode,
-          },
-          type: 'custom',
-        };
-
-        // 4. Update the frontend state to instantly show the new node
-        setNodes((nds) => nds.concat(newNode));
-      })
-      .catch(err => {
-        console.error("Failed to create canvas item:", err);
-        alert("Could not add the resource to the canvas.");
-      });
-  }, [area, nodes, setNodes]); // Dependencies for the function
-
 
   if (loading) return <p>Loading workspace...</p>;
   if (error) return <p style={{ color: 'red' }}>{error}</p>;
@@ -352,7 +356,7 @@ function WorkspaceView() {
         </div>
 
       {/* This is the conditional rendering, restored and fully functional */}
-        {viewMode === 'canvas' && (
+        <div style={{ display: viewMode === 'canvas' ? 'block' : 'none', height: '100%' }}>
           <ReactFlowProvider>
             <Canvas 
               nodes={nodes}
@@ -364,7 +368,7 @@ function WorkspaceView() {
               onConnect={onConnect}
             />
           </ReactFlowProvider>
-        )}
+        </div>
 
         {viewMode === 'tabs' && (
           <TabView 

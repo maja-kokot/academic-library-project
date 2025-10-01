@@ -54,6 +54,8 @@
   border-right: 1px solid #ddd;
   display: flex;
   flex-direction: column;
+  position: relative; /* <-- ADD THIS */
+  z-index: 20;         /* <-- ADD THIS (a high number) */
 }
 
 .sidebar-header {
@@ -102,6 +104,7 @@
 .main-content {
   flex-grow: 1; /* This makes it take up the remaining space */
   position: relative; /* Important for positioning child elements like the title overlay */
+  z-index: 10;  
 }
 
 /* Container for the view switcher buttons */
@@ -307,4 +310,76 @@
   background: #f24646;
   color: white;
   border-color: #d63030;
+}
+
+/* --- Planner Node Styles --- */
+
+.planner-node {
+  background: #fff8e1; /* A light yellow, like a notepad */
+  border: 1px solid #ffc107;
+  border-radius: 5px;
+  width: 300px;
+  font-size: 14px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.planner-header {
+  background: #ffecb3;
+  padding: 8px 12px;
+  border-bottom: 1px solid #ffc107;
+}
+
+.planner-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.task-list {
+  padding: 10px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.task-item input[type="checkbox"] {
+  margin-right: 10px;
+}
+
+.task-item span.completed {
+  text-decoration: line-through;
+  color: #888;
+}
+
+.no-tasks-message {
+  color: #888;
+  font-style: italic;
+  padding: 10px 0;
+  text-align: center;
+}
+
+.add-task-form {
+  display: flex;
+  border-top: 1px solid #ffc107;
+}
+
+.add-task-form input {
+  flex-grow: 1;
+  border: none;
+  padding: 10px;
+  background: #fffaf0;
+}
+
+.add-task-form button {
+  background: #ffc107;
+  border: none;
+  color: #333;
+  font-weight: bold;
+  font-size: 1.2rem;
+  padding: 0 15px;
+  cursor: pointer;
 }
