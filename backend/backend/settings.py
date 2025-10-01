@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'api', 
     'rest_framework', # Will need this for the API later, good to add now
     'corsheaders', # And this for CORS
+    # 'polymorphic',
 ]
 
 MIDDLEWARE = [

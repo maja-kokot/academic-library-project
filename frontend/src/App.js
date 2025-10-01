@@ -4,12 +4,16 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
 
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+
 import LibraryView from './components/LibraryView';
 import WorkspaceView from './components/WorkspaceView'; // This will now act as a layout
 import GlobalGraphView from './components/GlobalGraphView';
 
 function App() {
   return (
+  <DndProvider backend={HTML5Backend}>
     <Router>
       <div className="App">
         <header className="App-header">
@@ -31,6 +35,7 @@ function App() {
         </header>
       </div>
     </Router>
+  </DndProvider>
   );
 }
 

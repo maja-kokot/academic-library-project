@@ -7,7 +7,8 @@ from .views import (
     ResourceViewSet,
     ResourceConnectionViewSet,
     CanvasItemViewSet,
-    TaskViewSet
+    TaskViewSet,
+    NoteViewSet
 )
 
 # Create a router and register our viewsets with it.
@@ -17,6 +18,7 @@ router.register(r'resources', ResourceViewSet, basename='resource')
 router.register(r'connections', ResourceConnectionViewSet, basename='resourceconnection')
 router.register(r'canvas-items', CanvasItemViewSet, basename='canvasitem')
 router.register(r'tasks', TaskViewSet, basename='task')
+router.register(r'notes', NoteViewSet, basename='note')
 
 # The API URLs are now determined automatically by the router.
 urlpatterns = [
